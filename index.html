@@ -1,0 +1,2336 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Love Sushi Order Builder</title><style>
+:root{--r:#c8102e;--bg:#fff8f0;--ink:#222}*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{position:sticky;top:0;background:var(--r);color:#fff;padding:10px 14px;z-index:5}header h1{margin:0;font-size:1.2rem}
+#tabs{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px}#tabs button{white-space:nowrap;border:0;border-radius:14px;padding:5px 10px;background:#fff3;color:#fff}#tabs button.on{background:#fff;color:var(--r)}
+#search{width:100%;padding:7px;border-radius:8px;border:0;margin-top:6px}
+main{display:grid;grid-template-columns:1fr 360px;gap:12px;padding:12px}@media(max-width:800px){main{grid-template-columns:1fr}}
+.item{background:#fff;border-radius:10px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;gap:8px;cursor:pointer;box-shadow:0 1px 2px #0001}
+.item small{color:#666;display:block}.price{font-weight:600;white-space:nowrap}.note{color:#666;font-size:.85rem;margin:4px 0 8px}
+aside{background:#fff;border-radius:10px;padding:12px;align-self:start;position:sticky;top:120px}
+.line{display:flex;justify-content:space-between;gap:6px;padding:6px 0;border-bottom:1px solid #eee;font-size:.9rem}.line small{color:#666;display:block}
+.qty button{width:26px}.tot div{display:flex;justify-content:space-between;padding:2px 0}.tot .g{font-weight:700;font-size:1.1rem;border-top:2px solid var(--ink);margin-top:4px;padding-top:4px}
+button.p{background:var(--r);color:#fff;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}button.s{border:1px solid #ccc;background:#fff;border-radius:8px;padding:6px 10px;cursor:pointer}
+dialog{border:0;border-radius:12px;max-width:440px;width:92%}dialog h3{margin-top:0}.grp{margin:8px 0}.grp label{display:block;padding:3px 0}.err{color:var(--r);font-size:.85rem}
+.saved{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee}.flag{color:var(--r)}
+</style></head><body>
+<header><h1>Love Sushi · Order Builder</h1><input id="search" placeholder="Search the menu"><div id="tabs"></div></header>
+<main><section id="list"></section>
+<aside><h3 style="margin:0 0 6px">Order</h3><div id="cart"></div>
+<div class="tot" id="tot"></div>
+<div style="margin:8px 0;font-size:.9rem">Tip <select id="tip"><option value="0">None</option><option value="15">15%</option><option value="18">18%</option><option value="20">20%</option><option value="c">Custom</option></select>
+<input id="tipc" type="number" step="0.01" min="0" style="width:70px;display:none" placeholder="$"> &nbsp;<label><input type="checkbox" id="party"> Party of 6+</label></div>
+<div style="font-size:.9rem">Tax rate <input id="rate" type="number" step="0.01" min="0" style="width:64px">%</div>
+<div style="display:flex;gap:6px;margin:10px 0;flex-wrap:wrap"><button class="p" id="save">Save order</button><button class="s" id="clear">Clear</button></div>
+<h4 style="margin:10px 0 4px">Saved orders</h4><div id="saved"></div>
+<div style="display:flex;gap:6px;margin-top:8px"><button class="s" id="exp">Export</button><label class="s" style="cursor:pointer">Import<input type="file" id="imp" accept=".json" hidden></label></div>
+</aside></main>
+<dialog id="dlg"><form method="dialog" id="dform"></form></dialog>
+<script>
+const M={
+ "restaurant": "Love Sushi",
+ "source": "menu.pdf (Sep 2024)",
+ "taxRateDefault": 0.0825,
+ "partyGratuity": {
+  "minParty": 6,
+  "rate": 0.18,
+  "note": "estimate"
+ },
+ "categories": [
+  {
+   "id": "appetizer",
+   "name": "Appetizer",
+   "items": [
+    {
+     "id": "appetizer/edamame",
+     "name": "Edamame",
+     "price": 5.0
+    },
+    {
+     "id": "appetizer/cajun-edamame",
+     "name": "Cajun Edamame",
+     "price": 6.0
+    },
+    {
+     "id": "appetizer/chicken-finger-5-pcs",
+     "name": "Chicken Finger (5 pcs)",
+     "price": 7.95,
+     "desc": "Fried Chicken Strip"
+    },
+    {
+     "id": "appetizer/creamy-shrimp-5-pcs",
+     "name": "Creamy Shrimp (5 pcs)",
+     "price": 7.5,
+     "desc": "Deep Fried, Shrimp, Cream Cheese, Wonton Wrap"
+    },
+    {
+     "id": "appetizer/crab-monster-4-pcs",
+     "name": "Crab Monster (4 pcs)",
+     "price": 7.0,
+     "desc": "Deep Fried, Crab Meat, Cream Cheese, Jalapeño, Wonton Wrap"
+    },
+    {
+     "id": "appetizer/gyoza-6-pcs",
+     "name": "Gyoza (6 pcs)",
+     "price": 6.25,
+     "desc": "Deep Fried Pork Dumpling"
+    },
+    {
+     "id": "appetizer/soft-shell-crab",
+     "name": "Soft Shell Crab",
+     "price": 8.25,
+     "desc": "Deep Fried Soft Shell Crab, Ponzu Sauce"
+    },
+    {
+     "id": "appetizer/heart-attack",
+     "name": "Heart Attack",
+     "price": 7.95,
+     "desc": "Deep Fried, Fresh Jalapeño, Crab Meat, Cream Cheese w/ Eel Spicy Mayo Sauce"
+    },
+    {
+     "id": "appetizer/avocado-bomb",
+     "name": "Avocado Bomb",
+     "price": 7.95,
+     "desc": "Deep Fried, Avocado, Crab Meat, Spicy Tuna w/ Eel Spicy Mayo"
+    },
+    {
+     "id": "appetizer/sushi-appetizer",
+     "name": "Sushi Appetizer",
+     "price": 9.95,
+     "desc": "Tuna, Salmon, Red Snapper, White Tuna, Shrimp"
+    },
+    {
+     "id": "appetizer/yellowtail-heaven",
+     "name": "Yellowtail Heaven",
+     "price": 14.95,
+     "desc": "Yellowtail, Fresh Jalapeño w/ Yuzu Sauce"
+    },
+    {
+     "id": "appetizer/red-snapper-heaven",
+     "name": "Red Snapper Heaven",
+     "price": 13.95,
+     "desc": "Red Snapper, Fresh Jalapeño w/ Yuzu Sauce"
+    },
+    {
+     "id": "appetizer/tuna-tataki",
+     "name": "Tuna Tataki",
+     "price": 14.95,
+     "desc": "Seared Tuna, Green Onion w/ Yuzu Sauce"
+    }
+   ]
+  },
+  {
+   "id": "tempura-appetizer",
+   "name": "Tempura Appetizer",
+   "items": [
+    {
+     "id": "tempura-appetizer/shrimp-5pcs",
+     "name": "Shrimp (5pcs)",
+     "price": 8.0
+    },
+    {
+     "id": "tempura-appetizer/calamari-5pcs",
+     "name": "Calamari (5pcs)",
+     "price": 8.0
+    },
+    {
+     "id": "tempura-appetizer/veggie-8pcs",
+     "name": "Veggie (8pcs)",
+     "price": 7.5,
+     "desc": "Asparagus, Onion, Carrot, Sweet Potato, Zucchini"
+    },
+    {
+     "id": "tempura-appetizer/sweet-potato-6pcs",
+     "name": "Sweet Potato (6pcs)",
+     "price": 7.5
+    },
+    {
+     "id": "tempura-appetizer/mix-tempura",
+     "name": "Mix Tempura",
+     "price": 8.5,
+     "desc": "2pcs Shrimp, 2pcs Calamari, 4pcs Veggies"
+    }
+   ]
+  },
+  {
+   "id": "soup-salad-sides",
+   "name": "Soup, Salad & Sides",
+   "items": [
+    {
+     "id": "soup-salad-sides/miso",
+     "name": "Miso",
+     "price": 1.95
+    },
+    {
+     "id": "soup-salad-sides/steam-rice",
+     "name": "Steam Rice",
+     "price": 2.95
+    },
+    {
+     "id": "soup-salad-sides/house-salad",
+     "name": "House Salad",
+     "price": 4.5
+    },
+    {
+     "id": "soup-salad-sides/seaweed-salad",
+     "name": "Seaweed Salad",
+     "price": 6.5
+    },
+    {
+     "id": "soup-salad-sides/squid-salad",
+     "name": "Squid Salad",
+     "price": 7.5
+    },
+    {
+     "id": "soup-salad-sides/cucumber-salad",
+     "name": "Cucumber Salad",
+     "price": 6.5
+    },
+    {
+     "id": "soup-salad-sides/sashimi-salad",
+     "name": "Sashimi Salad",
+     "price": 13.95
+    },
+    {
+     "id": "soup-salad-sides/sauce",
+     "name": "Sauce",
+     "price": 0.25
+    }
+   ]
+  },
+  {
+   "id": "a-la-carte",
+   "name": "A La Carte",
+   "items": [
+    {
+     "id": "a-la-carte/chicken-teriyaki",
+     "name": "Chicken Teriyaki",
+     "price": 15.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "a-la-carte/beef-teriyaki",
+     "name": "Beef Teriyaki",
+     "price": 18.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "a-la-carte/salmon-teriyaki",
+     "name": "Salmon Teriyaki",
+     "price": 18.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "a-la-carte/don-katsu",
+     "name": "Don Katsu",
+     "price": 17.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "a-la-carte/chicken-katsu",
+     "name": "Chicken Katsu",
+     "price": 17.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "a-la-carte/bulgogi",
+     "name": "Bulgogi",
+     "price": 18.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "note": "Served w/ Miso Soup, Salad, Steam Rice Topped w/ Sauce"
+  },
+  {
+   "id": "bento-box",
+   "name": "Bento Box",
+   "items": [
+    {
+     "id": "bento-box/chicken-teriyaki",
+     "name": "Chicken Teriyaki",
+     "price": 14.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bento-box/beef-teriyaki",
+     "name": "Beef Teriyaki",
+     "price": 16.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bento-box/salmon-teriyaki",
+     "name": "Salmon Teriyaki",
+     "price": 16.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bento-box/don-katsu",
+     "name": "Don Katsu",
+     "price": 15.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bento-box/chicken-katsu",
+     "name": "Chicken Katsu",
+     "price": 15.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "bento-box/bulgogi",
+     "name": "Bulgogi",
+     "price": 16.95,
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "note": "Served w/ Miso Soup, Salad, 4pcs California, 4pcs Tempura, Steam Rice Topped w/ Sauce"
+  },
+  {
+   "id": "lunch-special",
+   "name": "Lunch Special",
+   "items": [
+    {
+     "id": "lunch-special/chicken-teriyaki",
+     "name": "Chicken Teriyaki",
+     "price": 10.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/beef-teriyaki",
+     "name": "Beef Teriyaki",
+     "price": 12.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/salmon-teriyaki",
+     "name": "Salmon Teriyaki",
+     "price": 12.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/don-katsu",
+     "name": "Don Katsu",
+     "price": 11.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/chicken-katsu",
+     "name": "Chicken Katsu",
+     "price": 11.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/bulgogi",
+     "name": "Bulgogi",
+     "price": 12.95,
+     "desc": "Lunch Plate",
+     "options": [
+      {
+       "group": "Add-on",
+       "required": false,
+       "choices": [
+        {
+         "label": "Add Fried Rice",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/a-3-for-10",
+     "name": "A. 3 for $10",
+     "price": 10.0,
+     "desc": "Choose Any 3 Regular Rolls",
+     "options": [
+      {
+       "group": "Regular Rolls",
+       "required": true,
+       "pick": 3,
+       "choices": [
+        {
+         "label": "Arizona",
+         "delta": 0
+        },
+        {
+         "label": "Avocado",
+         "delta": 0
+        },
+        {
+         "label": "Calamari",
+         "delta": 0
+        },
+        {
+         "label": "California",
+         "delta": 0
+        },
+        {
+         "label": "Cowboy",
+         "delta": 0
+        },
+        {
+         "label": "Cucumber",
+         "delta": 0
+        },
+        {
+         "label": "Deep Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Eel",
+         "delta": 0
+        },
+        {
+         "label": "Fantastic",
+         "delta": 0
+        },
+        {
+         "label": "Firecracker",
+         "delta": 0
+        },
+        {
+         "label": "Fish Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Fuji",
+         "delta": 0
+        },
+        {
+         "label": "Healthy",
+         "delta": 0
+        },
+        {
+         "label": "Hiroshima",
+         "delta": 0
+        },
+        {
+         "label": "Kani",
+         "delta": 0
+        },
+        {
+         "label": "Lemon Chicken",
+         "delta": 0
+        },
+        {
+         "label": "Louisiana",
+         "delta": 0
+        },
+        {
+         "label": "Love",
+         "delta": 0
+        },
+        {
+         "label": "Mexican",
+         "delta": 0
+        },
+        {
+         "label": "Moyamoya",
+         "delta": 0
+        },
+        {
+         "label": "Passion",
+         "delta": 0
+        },
+        {
+         "label": "Philadelphia",
+         "delta": 0
+        },
+        {
+         "label": "Pop",
+         "delta": 0
+        },
+        {
+         "label": "Red & White",
+         "delta": 0
+        },
+        {
+         "label": "Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Salmon Skin",
+         "delta": 0
+        },
+        {
+         "label": "Shrimp Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Spam",
+         "delta": 0
+        },
+        {
+         "label": "Spicy California",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spider",
+         "delta": 0
+        },
+        {
+         "label": "Tornado",
+         "delta": 0
+        },
+        {
+         "label": "Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Tyson",
+         "delta": 0
+        },
+        {
+         "label": "Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Yam",
+         "delta": 0
+        },
+        {
+         "label": "Yellowtail",
+         "delta": 0
+        },
+        {
+         "label": "Yokohama",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "lunch-special/b-sushi-plate",
+     "name": "B. Sushi Plate",
+     "price": 10.95,
+     "desc": "4pcs Sushi + Any 1 Regular Roll + Miso Soup",
+     "options": [
+      {
+       "group": "Regular Roll",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Arizona",
+         "delta": 0
+        },
+        {
+         "label": "Avocado",
+         "delta": 0
+        },
+        {
+         "label": "Calamari",
+         "delta": 0
+        },
+        {
+         "label": "California",
+         "delta": 0
+        },
+        {
+         "label": "Cowboy",
+         "delta": 0
+        },
+        {
+         "label": "Cucumber",
+         "delta": 0
+        },
+        {
+         "label": "Deep Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Eel",
+         "delta": 0
+        },
+        {
+         "label": "Fantastic",
+         "delta": 0
+        },
+        {
+         "label": "Firecracker",
+         "delta": 0
+        },
+        {
+         "label": "Fish Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Fuji",
+         "delta": 0
+        },
+        {
+         "label": "Healthy",
+         "delta": 0
+        },
+        {
+         "label": "Hiroshima",
+         "delta": 0
+        },
+        {
+         "label": "Kani",
+         "delta": 0
+        },
+        {
+         "label": "Lemon Chicken",
+         "delta": 0
+        },
+        {
+         "label": "Louisiana",
+         "delta": 0
+        },
+        {
+         "label": "Love",
+         "delta": 0
+        },
+        {
+         "label": "Mexican",
+         "delta": 0
+        },
+        {
+         "label": "Moyamoya",
+         "delta": 0
+        },
+        {
+         "label": "Passion",
+         "delta": 0
+        },
+        {
+         "label": "Philadelphia",
+         "delta": 0
+        },
+        {
+         "label": "Pop",
+         "delta": 0
+        },
+        {
+         "label": "Red & White",
+         "delta": 0
+        },
+        {
+         "label": "Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Salmon Skin",
+         "delta": 0
+        },
+        {
+         "label": "Shrimp Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Spam",
+         "delta": 0
+        },
+        {
+         "label": "Spicy California",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spider",
+         "delta": 0
+        },
+        {
+         "label": "Tornado",
+         "delta": 0
+        },
+        {
+         "label": "Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Tyson",
+         "delta": 0
+        },
+        {
+         "label": "Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Yam",
+         "delta": 0
+        },
+        {
+         "label": "Yellowtail",
+         "delta": 0
+        },
+        {
+         "label": "Yokohama",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "note": "Lunch Plate served w/ Miso Soup, Salad, 4pcs California, Steam Rice Topped w/ Sauce. Last call Mon–Fri 2:15 pm, Sat–Sun 3:15 pm"
+  },
+  {
+   "id": "fried-rice",
+   "name": "Fried Rice",
+   "items": [
+    {
+     "id": "fried-rice/veggie",
+     "name": "Veggie",
+     "price": 9.95
+    },
+    {
+     "id": "fried-rice/chicken",
+     "name": "Chicken",
+     "price": 10.95
+    },
+    {
+     "id": "fried-rice/beef",
+     "name": "Beef",
+     "price": 11.95
+    },
+    {
+     "id": "fried-rice/shrimp",
+     "name": "Shrimp",
+     "price": 11.95
+    },
+    {
+     "id": "fried-rice/combo",
+     "name": "Combo",
+     "price": 12.95
+    }
+   ]
+  },
+  {
+   "id": "noodle",
+   "name": "Noodle",
+   "items": [
+    {
+     "id": "noodle/tempura-udon",
+     "name": "Tempura Udon",
+     "price": 11.95
+    },
+    {
+     "id": "noodle/yaki-soba-udon",
+     "name": "Yaki Soba / Udon",
+     "price": 10.95,
+     "desc": "Stir Fried Thin / Thick Noodle",
+     "options": [
+      {
+       "group": "Noodle",
+       "required": true,
+       "choices": [
+        {
+         "label": "Soba (thin)",
+         "delta": 0
+        },
+        {
+         "label": "Udon (thick)",
+         "delta": 0
+        }
+       ]
+      },
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Veggie",
+         "delta": 0.0
+        },
+        {
+         "label": "Chicken",
+         "delta": 1.0
+        },
+        {
+         "label": "Beef",
+         "delta": 2.0
+        },
+        {
+         "label": "Shrimp",
+         "delta": 2.0
+        },
+        {
+         "label": "Combo",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "noodle/basil-yaki-udon",
+     "name": "Basil Yaki Udon",
+     "price": 12.95,
+     "desc": "Stir Fried Thick Noodle w/ Spicy Thai Brown Sauce",
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Veggie",
+         "delta": 0.0
+        },
+        {
+         "label": "Chicken",
+         "delta": 1.0
+        },
+        {
+         "label": "Beef",
+         "delta": 2.0
+        },
+        {
+         "label": "Shrimp",
+         "delta": 2.0
+        },
+        {
+         "label": "Combo",
+         "delta": 3.0
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "kid-s-menu",
+   "name": "Kid's Menu",
+   "items": [
+    {
+     "id": "kid-s-menu/chicken-teriyaki",
+     "name": "Chicken Teriyaki",
+     "price": 7.95
+    },
+    {
+     "id": "kid-s-menu/beef-teriyaki",
+     "name": "Beef Teriyaki",
+     "price": 8.95
+    },
+    {
+     "id": "kid-s-menu/chicken-katsu",
+     "name": "Chicken Katsu",
+     "price": 8.95
+    },
+    {
+     "id": "kid-s-menu/fried-rice",
+     "name": "Fried Rice",
+     "price": 5.95,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Veggie",
+         "delta": 0.0
+        },
+        {
+         "label": "Chicken",
+         "delta": 1.0
+        },
+        {
+         "label": "Shrimp",
+         "delta": 2.0
+        },
+        {
+         "label": "Beef",
+         "delta": 2.0
+        }
+       ]
+      }
+     ]
+    }
+   ],
+   "note": "Under 12 Years Old"
+  },
+  {
+   "id": "dinner-special",
+   "name": "Dinner Special",
+   "items": [
+    {
+     "id": "dinner-special/a-2-for-10",
+     "name": "A. 2 for $10",
+     "price": 10.0,
+     "desc": "Choose Any 2 Regular Rolls",
+     "options": [
+      {
+       "group": "Regular Rolls",
+       "required": true,
+       "pick": 2,
+       "choices": [
+        {
+         "label": "Arizona",
+         "delta": 0
+        },
+        {
+         "label": "Avocado",
+         "delta": 0
+        },
+        {
+         "label": "Calamari",
+         "delta": 0
+        },
+        {
+         "label": "California",
+         "delta": 0
+        },
+        {
+         "label": "Cowboy",
+         "delta": 0
+        },
+        {
+         "label": "Cucumber",
+         "delta": 0
+        },
+        {
+         "label": "Deep Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Eel",
+         "delta": 0
+        },
+        {
+         "label": "Fantastic",
+         "delta": 0
+        },
+        {
+         "label": "Firecracker",
+         "delta": 0
+        },
+        {
+         "label": "Fish Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Fuji",
+         "delta": 0
+        },
+        {
+         "label": "Healthy",
+         "delta": 0
+        },
+        {
+         "label": "Hiroshima",
+         "delta": 0
+        },
+        {
+         "label": "Kani",
+         "delta": 0
+        },
+        {
+         "label": "Lemon Chicken",
+         "delta": 0
+        },
+        {
+         "label": "Louisiana",
+         "delta": 0
+        },
+        {
+         "label": "Love",
+         "delta": 0
+        },
+        {
+         "label": "Mexican",
+         "delta": 0
+        },
+        {
+         "label": "Moyamoya",
+         "delta": 0
+        },
+        {
+         "label": "Passion",
+         "delta": 0
+        },
+        {
+         "label": "Philadelphia",
+         "delta": 0
+        },
+        {
+         "label": "Pop",
+         "delta": 0
+        },
+        {
+         "label": "Red & White",
+         "delta": 0
+        },
+        {
+         "label": "Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Salmon Skin",
+         "delta": 0
+        },
+        {
+         "label": "Shrimp Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Spam",
+         "delta": 0
+        },
+        {
+         "label": "Spicy California",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Spider",
+         "delta": 0
+        },
+        {
+         "label": "Tornado",
+         "delta": 0
+        },
+        {
+         "label": "Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Tyson",
+         "delta": 0
+        },
+        {
+         "label": "Veggie",
+         "delta": 0
+        },
+        {
+         "label": "Yam",
+         "delta": 0
+        },
+        {
+         "label": "Yellowtail",
+         "delta": 0
+        },
+        {
+         "label": "Yokohama",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "dinner-special/b-combo-special",
+     "name": "B. Combo Special",
+     "price": 13.0,
+     "desc": "One Special Roll (6–8pcs) and Half Size Regular Roll (4pcs)",
+     "options": [
+      {
+       "group": "Special Roll",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Alaskan",
+         "delta": 0
+        },
+        {
+         "label": "Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Enjoy",
+         "delta": 0
+        },
+        {
+         "label": "Happy",
+         "delta": 0
+        },
+        {
+         "label": "Hawaiian",
+         "delta": 0
+        },
+        {
+         "label": "Las Vegas",
+         "delta": 0
+        },
+        {
+         "label": "Mocking Bird",
+         "delta": 0
+        },
+        {
+         "label": "Ocean Wave",
+         "delta": 0
+        },
+        {
+         "label": "Rock'n Roll",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Alaskan",
+         "delta": 0
+        }
+       ]
+      },
+      {
+       "group": "Half Regular Roll",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Avocado",
+         "delta": 0
+        },
+        {
+         "label": "California",
+         "delta": 0
+        },
+        {
+         "label": "Cucumber",
+         "delta": 0
+        },
+        {
+         "label": "Eel",
+         "delta": 0
+        },
+        {
+         "label": "Kani",
+         "delta": 0
+        },
+        {
+         "label": "Louisiana",
+         "delta": 0
+        },
+        {
+         "label": "Philadelphia",
+         "delta": 0
+        },
+        {
+         "label": "Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Shrimp Tempura",
+         "delta": 0
+        },
+        {
+         "label": "Spicy California",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Salmon",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Spicy Tuna Crunch",
+         "delta": 0
+        },
+        {
+         "label": "Tuna",
+         "delta": 0
+        },
+        {
+         "label": "Yellowtail",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dessert",
+   "name": "Dessert",
+   "items": [
+    {
+     "id": "dessert/ice-cream",
+     "name": "Ice Cream",
+     "price": 4.5,
+     "options": [
+      {
+       "group": "Flavor",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Green Tea",
+         "delta": 0
+        },
+        {
+         "label": "Strawberry",
+         "delta": 0
+        },
+        {
+         "label": "Mango",
+         "delta": 0
+        },
+        {
+         "label": "Vanilla",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "dessert/tempura-ice-cream",
+     "name": "Tempura Ice Cream",
+     "price": 7.5,
+     "options": [
+      {
+       "group": "Flavor",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Green Tea",
+         "delta": 0
+        },
+        {
+         "label": "Vanilla",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "dessert/mochi",
+     "name": "Mochi",
+     "price": 5.95,
+     "options": [
+      {
+       "group": "Flavor",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Green Tea",
+         "delta": 0
+        },
+        {
+         "label": "Strawberry",
+         "delta": 0
+        },
+        {
+         "label": "Mango",
+         "delta": 0
+        },
+        {
+         "label": "Vanilla",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "dessert/cheese-cake-yuzu",
+     "name": "Cheese Cake Yuzu",
+     "price": 5.95
+    }
+   ],
+   "note": "Served w/ Whipped Cream and Chocolate Syrup"
+  },
+  {
+   "id": "drink",
+   "name": "Drink",
+   "items": [
+    {
+     "id": "drink/soda-iced-tea-hot-green-tea",
+     "name": "Soda / Iced Tea / Hot Green Tea",
+     "price": 2.95
+    },
+    {
+     "id": "drink/ramune",
+     "name": "Ramune",
+     "price": 4.0,
+     "options": [
+      {
+       "group": "Flavor",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Regular",
+         "delta": 0
+        },
+        {
+         "label": "Strawberry",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "drink/juice",
+     "name": "Juice",
+     "price": 2.95,
+     "options": [
+      {
+       "group": "Flavor",
+       "required": true,
+       "pick": 1,
+       "choices": [
+        {
+         "label": "Apple",
+         "delta": 0
+        },
+        {
+         "label": "Orange",
+         "delta": 0
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "drink/milk",
+     "name": "Milk",
+     "price": 2.95
+    }
+   ]
+  },
+  {
+   "id": "sushi-sashimi",
+   "name": "Sushi & Sashimi",
+   "items": [
+    {
+     "id": "sushi-sashimi/tuna",
+     "name": "Tuna",
+     "price": 5.75,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.2
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/salmon",
+     "name": "Salmon",
+     "price": 5.5,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.45
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/yellowtail",
+     "name": "Yellowtail",
+     "price": 6.25,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.7
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/red-snapper",
+     "name": "Red Snapper",
+     "price": 5.25,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.7
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/white-tuna",
+     "name": "White Tuna",
+     "price": 5.25,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.7
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/albacore-tuna",
+     "name": "Albacore Tuna",
+     "price": 5.75,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.2
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/smoked-salmon",
+     "name": "Smoked Salmon",
+     "price": 6.0,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 6.95
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/octopus",
+     "name": "Octopus",
+     "price": 6.5,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 6.45
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/freshwater-eel",
+     "name": "Freshwater Eel",
+     "price": 5.75,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 7.2
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/cooked-shrimp",
+     "name": "Cooked Shrimp",
+     "price": 5.25,
+     "options": [
+      {
+       "group": "Choice",
+       "required": true,
+       "choices": [
+        {
+         "label": "Sushi 2pcs",
+         "delta": 0.0
+        },
+        {
+         "label": "Sashimi 6pcs",
+         "delta": 6.7
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "id": "sushi-sashimi/scallop",
+     "name": "Scallop",
+     "price": 6.25,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/squid",
+     "name": "Squid",
+     "price": 5.75,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/masago",
+     "name": "Masago",
+     "price": 5.5,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/tobiko",
+     "name": "Tobiko",
+     "price": 5.5,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/sweet-shrimp",
+     "name": "Sweet Shrimp",
+     "price": 8.5,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/salmon-roe",
+     "name": "Salmon Roe",
+     "price": 8.5,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/crab-stick",
+     "name": "Crab Stick",
+     "price": 5.0,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/snow-crab",
+     "name": "Snow Crab",
+     "price": 8.5,
+     "desc": "Sushi 2pcs"
+    },
+    {
+     "id": "sushi-sashimi/tamago",
+     "name": "Tamago",
+     "price": 5.0,
+     "desc": "Sushi 2pcs"
+    }
+   ]
+  },
+  {
+   "id": "regular-roll",
+   "name": "Regular Roll",
+   "items": [
+    {
+     "id": "regular-roll/arizona",
+     "name": "Arizona",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/avocado",
+     "name": "Avocado",
+     "price": 5.5
+    },
+    {
+     "id": "regular-roll/calamari",
+     "name": "Calamari",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/california",
+     "name": "California",
+     "price": 6
+    },
+    {
+     "id": "regular-roll/cowboy",
+     "name": "Cowboy",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/cucumber",
+     "name": "Cucumber",
+     "price": 5.5
+    },
+    {
+     "id": "regular-roll/deep-veggie",
+     "name": "Deep Veggie",
+     "price": 6.5
+    },
+    {
+     "id": "regular-roll/eel",
+     "name": "Eel",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/fantastic",
+     "name": "Fantastic",
+     "price": 7.95
+    },
+    {
+     "id": "regular-roll/firecracker",
+     "name": "Firecracker",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/fish-tempura",
+     "name": "Fish Tempura",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/fuji",
+     "name": "Fuji",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/healthy",
+     "name": "Healthy",
+     "price": 7.95
+    },
+    {
+     "id": "regular-roll/hiroshima",
+     "name": "Hiroshima",
+     "price": 7.95
+    },
+    {
+     "id": "regular-roll/kani",
+     "name": "Kani",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/lemon-chicken",
+     "name": "Lemon Chicken",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/louisiana",
+     "name": "Louisiana",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/love",
+     "name": "Love",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/mexican",
+     "name": "Mexican",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/moyamoya",
+     "name": "Moyamoya",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/passion",
+     "name": "Passion",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/philadelphia",
+     "name": "Philadelphia",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/pop",
+     "name": "Pop",
+     "price": 6
+    },
+    {
+     "id": "regular-roll/red-white",
+     "name": "Red & White",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/salmon",
+     "name": "Salmon",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/salmon-skin",
+     "name": "Salmon Skin",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/shrimp-tempura",
+     "name": "Shrimp Tempura",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/spam",
+     "name": "Spam",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/spicy-california",
+     "name": "Spicy California",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/spicy-salmon",
+     "name": "Spicy Salmon",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/spicy-salmon-crunch",
+     "name": "Spicy Salmon Crunch",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/spicy-tuna",
+     "name": "Spicy Tuna",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/spicy-tuna-crunch",
+     "name": "Spicy Tuna Crunch",
+     "price": 7.5
+    },
+    {
+     "id": "regular-roll/spider",
+     "name": "Spider",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/tornado",
+     "name": "Tornado",
+     "price": 7.95
+    },
+    {
+     "id": "regular-roll/tuna",
+     "name": "Tuna",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/tyson",
+     "name": "Tyson",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/veggie",
+     "name": "Veggie",
+     "price": 6.5
+    },
+    {
+     "id": "regular-roll/yam",
+     "name": "Yam",
+     "price": 6.5
+    },
+    {
+     "id": "regular-roll/yellowtail",
+     "name": "Yellowtail",
+     "price": 7
+    },
+    {
+     "id": "regular-roll/yokohama",
+     "name": "Yokohama",
+     "price": 7
+    }
+   ]
+  },
+  {
+   "id": "special-roll",
+   "name": "Special Roll",
+   "items": [
+    {
+     "id": "special-roll/ahi-salmon-tower",
+     "name": "Ahi Salmon Tower",
+     "price": 14.95
+    },
+    {
+     "id": "special-roll/ahi-tuna-tower",
+     "name": "Ahi Tuna Tower",
+     "price": 14.95
+    },
+    {
+     "id": "special-roll/alaskan",
+     "name": "Alaskan",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/baked-salmon",
+     "name": "Baked Salmon",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/blazing-151",
+     "name": "Blazing 151",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/caterpillar",
+     "name": "Caterpillar",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/crawfish-volcano",
+     "name": "Crawfish Volcano",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/crunch",
+     "name": "Crunch",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/dancing-eel",
+     "name": "Dancing Eel",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/dragonfly",
+     "name": "Dragonfly",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/dynamite",
+     "name": "Dynamite",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/ebi-ebi",
+     "name": "Ebi Ebi",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/eldorado-pkwy",
+     "name": "Eldorado Pkwy",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/enjoy",
+     "name": "Enjoy",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/ex-boyfriend",
+     "name": "Ex-Boyfriend",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/ex-girlfriend",
+     "name": "Ex-Girlfriend",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/festival",
+     "name": "Festival",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/flame",
+     "name": "Flame",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/frisco",
+     "name": "Frisco",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/geisha",
+     "name": "Geisha",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/green",
+     "name": "Green",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/hamachi",
+     "name": "Hamachi",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/happy",
+     "name": "Happy",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/hawaiian",
+     "name": "Hawaiian",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/las-vegas",
+     "name": "Las Vegas",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/mocking-bird",
+     "name": "Mocking Bird",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/new-twister",
+     "name": "New Twister",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/ocean-wave",
+     "name": "Ocean Wave",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/panic",
+     "name": "Panic",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/rainbow",
+     "name": "Rainbow",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/red-dragon",
+     "name": "Red Dragon",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/rock-n-roll",
+     "name": "Rock'N Roll",
+     "price": 10.95
+    },
+    {
+     "id": "special-roll/samurai",
+     "name": "Samurai",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/sashimi",
+     "name": "Sashimi",
+     "price": 14.95
+    },
+    {
+     "id": "special-roll/scallop-volcano",
+     "name": "Scallop Volcano",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/shrimp-volcano",
+     "name": "Shrimp Volcano",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/spicy-crunch",
+     "name": "Spicy Crunch",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/spider-man",
+     "name": "Spider Man",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/submarine",
+     "name": "Submarine",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/sunset",
+     "name": "Sunset",
+     "price": 11.95
+    },
+    {
+     "id": "special-roll/super-dragon",
+     "name": "Super Dragon",
+     "price": 13.95
+    },
+    {
+     "id": "special-roll/super-volcano",
+     "name": "Super Volcano",
+     "price": 15.95
+    },
+    {
+     "id": "special-roll/sushi-time",
+     "name": "Sushi Time",
+     "price": 12.95
+    },
+    {
+     "id": "special-roll/white-tiger",
+     "name": "White Tiger",
+     "price": 12.95
+    }
+   ]
+  },
+  {
+   "id": "riceless-roll",
+   "name": "Riceless Roll",
+   "items": [
+    {
+     "id": "riceless-roll/butterfly-kiss",
+     "name": "Butterfly Kiss",
+     "price": 14.95
+    },
+    {
+     "id": "riceless-roll/caribbean",
+     "name": "Caribbean",
+     "price": 14.95
+    },
+    {
+     "id": "riceless-roll/heart",
+     "name": "Heart",
+     "price": 13.95
+    },
+    {
+     "id": "riceless-roll/kiss-on-fire",
+     "name": "Kiss On Fire",
+     "price": 14.95
+    },
+    {
+     "id": "riceless-roll/nude",
+     "name": "Nude",
+     "price": 12.95
+    },
+    {
+     "id": "riceless-roll/o-e",
+     "name": "O.E",
+     "price": 14.95
+    },
+    {
+     "id": "riceless-roll/spring",
+     "name": "Spring",
+     "price": 11.95
+    },
+    {
+     "id": "riceless-roll/tomo",
+     "name": "Tomo",
+     "price": 14.95
+    },
+    {
+     "id": "riceless-roll/tropical",
+     "name": "Tropical",
+     "price": 13.95
+    }
+   ]
+  }
+ ]
+};const $=s=>document.querySelector(s);const fmt=n=>'$'+n.toFixed(2);
+const idx={};M.categories.forEach(c=>c.items.forEach(i=>idx[i.id]=i));
+const LS=k=>JSON.parse(localStorage.getItem('ls_'+k)||'null'),SS=(k,v)=>localStorage.setItem('ls_'+k,JSON.stringify(v));
+let cart=LS('cart')||[],cur=M.categories[0].id;
+function importLine(l){
+const qty=Number(l&&l.qty);
+if(!l||typeof l.id!='string'||!l.id||!Array.isArray(l.opts)||!['number','string'].includes(typeof l.qty)||!Number.isSafeInteger(qty)||qty<=0)throw new Error('Invalid order quantity or line');
+return{id:l.id,opts:l.opts.map(g=>Array.isArray(g)?g.map(ci=>Number.isInteger(ci)?ci:null):null),qty}
+}
+const cents=n=>Math.round((n+Math.abs(n)*Number.EPSILON)*100)/100;
+function unit(l){
+const it=idx[l.id];if(!it||!Array.isArray(l.opts))return null;
+const groups=it.options||[];if(l.opts.length>groups.length)return null;
+let p=it.price;
+for(let gi=0;gi<groups.length;gi++){
+const g=groups[gi],chosen=l.opts[gi]===undefined?[]:l.opts[gi],n=g.pick||1;
+if(!Array.isArray(chosen)||(g.required?chosen.length!=n:chosen.length>(g.pick||g.choices.length)))return null;
+if(!g.pick&&new Set(chosen).size!=chosen.length)return null;
+for(const ci of chosen){if(!Number.isInteger(ci)||ci<0||ci>=g.choices.length)return null;p+=g.choices[ci].delta}
+}
+return p}
+function optText(l){const it=idx[l.id];if(!it||unit(l)==null)return'';return(it.options||[]).map((g,gi)=>(l.opts[gi]||[]).map(ci=>g.choices[ci].label).join(', ')).filter(Boolean).join(' · ')}
+function tabs(){$('#tabs').innerHTML=M.categories.map(c=>`<button data-c="${c.id}" class="${c.id==cur?'on':''}">${c.name}</button>`).join('');$('#tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>{cur=b.dataset.c;$('#search').value='';tabs();list()})}
+function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+function list(){const q=$('#search').value.trim().toLowerCase();let h='';M.categories.forEach(c=>{if(!q&&c.id!=cur)return;const its=c.items.filter(i=>!q||(i.name+' '+(i.desc||'')).toLowerCase().includes(q));if(!its.length)return;h+=`<h3>${esc(c.name)}</h3>`+(c.note?`<div class="note">${esc(c.note)}</div>`:'');its.forEach(i=>h+=`<div class="item" data-id="${i.id}"><div>${esc(i.name)}${i.desc?`<small>${esc(i.desc)}</small>`:''}</div><div class="price">${i.options&&i.options.some(g=>g.choices.some(x=>x.delta))?'from ':''}${fmt(i.price)}</div></div>`)});$('#list').innerHTML=h||'<p>No matches.</p>';$('#list').querySelectorAll('.item').forEach(d=>d.onclick=()=>choose(d.dataset.id))}
+function choose(id){const it=idx[id];if(!it.options){add({id,opts:[],qty:1});return}
+let h=`<h3>${esc(it.name)} · ${fmt(it.price)}</h3>`;it.options.forEach((g,gi)=>{const n=g.pick||1,multi=n>1;h+=`<div class="grp"><b>${esc(g.group)}</b>${multi?` (pick ${n}, repeats OK)`:''}${g.required?'':' (optional)'}`;
+if(multi){for(let k=0;k<n;k++)h+=`<label>#${k+1} <select data-g="${gi}">${g.choices.map((c,ci)=>`<option value="${ci}">${esc(c.label)}</option>`).join('')}</select></label>`}
+else g.choices.forEach((c,ci)=>h+=`<label><input type="${g.required?'radio':'checkbox'}" name="g${gi}" value="${ci}" ${g.required&&ci==0?'checked':''}> ${esc(c.label)}${c.delta?` (${c.delta>0?'+':''}${fmt(c.delta)})`:''}</label>`);h+='</div>'});
+h+=`<div style="display:flex;gap:6px;justify-content:flex-end"><button class="s" value="x">Cancel</button><button class="p" value="ok">Add</button></div>`;$('#dform').innerHTML=h;const d=$('#dlg');d.showModal();
+d.onclose=()=>{if(d.returnValue!='ok')return;const opts=it.options.map((g,gi)=>{if((g.pick||1)>1)return[...$('#dform').querySelectorAll(`select[data-g="${gi}"]`)].map(s=>+s.value);return[...$('#dform').querySelectorAll(`input[name="g${gi}"]:checked`)].map(x=>+x.value)});add({id,opts,qty:1})}}
+function add(l){const k=JSON.stringify([l.id,l.opts]);const e=cart.find(x=>JSON.stringify([x.id,x.opts])==k);e?e.qty++:cart.push(l);render()}
+function totals(){let sub=0,missing=0;cart.forEach(l=>{const u=unit(l);u==null?missing++:sub+=u*l.qty});const rate=(+$('#rate').value||0)/100;const tax=sub*rate;const party=$('#party').checked;let tip=0;const t=$('#tip').value;
+if(party)tip=sub*.18;else if(t=='c')tip=Math.max(0,+$('#tipc').value||0);else tip=sub*(+t)/100;
+sub=cents(sub);const roundedTax=cents(tax),roundedTip=cents(tip);
+return{sub,tax:roundedTax,tip:roundedTip,party,total:cents(sub+roundedTax+roundedTip),missing}}
+function render(){SS('cart',cart);$('#cart').innerHTML=cart.length?cart.map((l,i)=>{const it=idx[l.id],u=unit(l);return`<div class="line"><div>${it?esc(it.name):'<span class="flag">Item no longer on menu</span>'}${it&&u==null?'<small class="flag">Choices invalid or no longer available</small>':''}<small>${esc(optText(l))}</small></div><div class="qty"><button data-i="${i}" data-d="-1">−</button> ${l.qty} <button data-i="${i}" data-d="1">+</button><div style="text-align:right">${u==null?'—':fmt(u*l.qty)}</div></div></div>`}).join(''):'<p class="note">Tap an item to add it.</p>';
+$('#cart').querySelectorAll('button').forEach(b=>b.onclick=()=>{const l=cart[b.dataset.i];l.qty=Number(l.qty)+Number(b.dataset.d);if(l.qty<1)cart.splice(b.dataset.i,1);render()});
+const T=totals();$('#tot').innerHTML=`<div><span>Subtotal</span><span>${fmt(T.sub)}</span></div><div><span>Tax (${$('#rate').value}%)</span><span>${fmt(T.tax)}</span></div><div><span>${T.party?'Gratuity 18% (party of 6+, estimate)':'Tip'}</span><span>${fmt(T.tip)}</span></div><div class="g"><span>Total</span><span>${fmt(T.total)}</span></div>${T.missing?`<div class="err">${T.missing} item(s) or choices no longer available are excluded.</div>`:''}`;$('#tip').disabled=T.party}
+function saved(){const S=LS('saved')||[];$('#saved').innerHTML=S.length?S.map((o,i)=>{const miss=o.lines.filter(l=>unit(l)==null).length;return`<div class="saved"><span>${esc(o.name)} <small class="note">(${o.lines.reduce((a,l)=>a+Number(l.qty),0)} items${miss?`, <span class="flag">${miss} unavailable</span>`:''})</small></span><span><button class="s" data-a="load" data-i="${i}">Load</button> <button class="s" data-a="ren" data-i="${i}">Rename</button> <button class="s" data-a="dup" data-i="${i}">Copy</button> <button class="s" data-a="del" data-i="${i}">✕</button></span></div>`}).join(''):'<p class="note">None yet.</p>';
+$('#saved').querySelectorAll('button').forEach(b=>b.onclick=()=>{const S=LS('saved')||[],i=+b.dataset.i,o=S[i];if(b.dataset.a=='load'){if(cart.length&&!confirm('Replace the current order with "'+o.name+'"?'))return;cart=JSON.parse(JSON.stringify(o.lines));render()}
+if(b.dataset.a=='ren'){const n=prompt('New name',o.name);if(n)o.name=n.trim()}if(b.dataset.a=='dup')S.splice(i+1,0,{...JSON.parse(JSON.stringify(o)),name:o.name+' (copy)'});if(b.dataset.a=='del'&&confirm('Delete "'+o.name+'"?'))S.splice(i,1);SS('saved',S);saved()})}
+$('#save').onclick=()=>{if(!cart.length)return alert('Add something first.');const n=prompt('Name this order','Usual');if(!n)return;const S=LS('saved')||[];const ex=S.findIndex(o=>o.name==n.trim());const rec={name:n.trim(),lines:cart.map(({id,opts,qty})=>({id,opts,qty})),saved:new Date().toISOString()};if(ex>=0){if(!confirm('Overwrite "'+n+'"?'))return;S[ex]=rec}else S.push(rec);SS('saved',S);saved()};
+$('#clear').onclick=()=>{if(cart.length&&confirm('Clear the order?')){cart=[];render()}};
+$('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({v:1,saved:LS('saved')||[]},null,1)],{type:'application/json'}));a.download='love-sushi-orders.json';a.click()};
+$('#imp').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(d.v!==1||!Array.isArray(d.saved))throw new Error('Invalid export');const ok=d.saved.map(o=>{if(!o||typeof o.name!='string'||!Array.isArray(o.lines))throw new Error('Invalid order');return{name:o.name,lines:o.lines.map(importLine),saved:typeof o.saved=='string'?o.saved:undefined}});SS('saved',(LS('saved')||[]).concat(ok));saved();alert('Imported '+ok.length+' order(s).')}catch{alert('That file is not an order export.')}finally{e.target.value=''}};
+$('#rate').value=LS('rate')??(M.taxRateDefault*100).toFixed(2);$('#rate').oninput=()=>{SS('rate',$('#rate').value);render()};
+$('#tip').onchange=()=>{$('#tipc').style.display=$('#tip').value=='c'?'inline':'none';render()};$('#tipc').oninput=render;$('#party').onchange=render;$('#search').oninput=list;
+tabs();list();render();saved();
+</script></body></html>
